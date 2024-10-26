@@ -15,7 +15,7 @@ Item
 
     property var channels: QObjectTreeModel {}
 
-    property string conn_string: "tcp://localhost:5555"
+    property string conn_string: "tcp://localhost:50001"
     readonly property bool settingsValid: conn_string !== ""
 
     function queryProperties()

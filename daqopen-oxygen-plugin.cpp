@@ -227,7 +227,7 @@ public:
 
         for (auto& [ch_name, ch_prop] : meta_json["daq_info"]["channel"].items()) {
             m_channel_data_map[ch_name] = {};
-            m_data_column_map[ch_name] = meta_json["data_columns"][ch_name];
+            m_data_column_map[ch_name] = meta_json["data_columns"][ch_prop["ai_pin"]];
             
             // Check if channel exists in OXYGEN
             auto existing_channel = getOutputChannelByKey(DATA_CH_KEY_PREFIX + ch_name);
