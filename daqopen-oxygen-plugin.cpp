@@ -247,11 +247,17 @@ public:
                 .setDeletable(true)
                 ;
             }
+            auto min_range = (static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][0]) * 
+                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]) - 
+                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]));
+            auto max_range = (static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][1]) * 
+                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]) - 
+                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]));
             // Configure Channel
             m_channel_map[ch_name]->setSamplerate({meta_json["daq_info"]["board"]["samplerate"], "Hz"})
             .setSimpleTimebase(meta_json["daq_info"]["board"]["samplerate"])
-            .setRange({-10, 10, "", ""})
-            .setUnit("V")
+            .setRange({min_range, max_range, "", ""})
+            .setUnit(m_metadata["daq_info"]["channel"][ch_name]["unit"])
             ;
             
         }
@@ -333,7 +339,9 @@ public:
                 for (const auto& [ch_name, ch_data_vec] : m_channel_data_map) {
                     m_channel_data_map[ch_name].clear();
                     for (size_t idx = m_data_column_map[ch_name]; idx < data_vec.size(); idx += m_channel_data_map.size()) {
-                        m_channel_data_map[ch_name].push_back(static_cast<double>(data_vec[idx])); 
+                        m_channel_data_map[ch_name].push_back(static_cast<double>(data_vec[idx]*
+                                            static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]) - 
+                                            static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]))); 
                     }
                     addSamples(host, m_channel_map[ch_name]->getLocalId(), tick, &m_channel_data_map[ch_name][0], sizeof(double) * m_channel_data_map[ch_name].size());
                 }
