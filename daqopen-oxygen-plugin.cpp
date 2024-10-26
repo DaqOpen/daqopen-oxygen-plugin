@@ -217,7 +217,7 @@ public:
         auto [meta_json, data_vec] = *result;
         logger.log("JSON: " + meta_json.dump());
         m_metadata = meta_json;
-        
+
         // Initialize Sample ticks
         m_next_tick = std::numeric_limits<uint64_t>::max();
 
@@ -363,7 +363,7 @@ private:
 
 };
 
-class ReplaySyncScalarPlugin : public SoftwareChannelPlugin<DaqOpenZmqInstance>
+class DaqOpenZmqSubscriberPlugin : public SoftwareChannelPlugin<DaqOpenZmqInstance>
 {
 public:
     void registerResources() final
@@ -374,5 +374,5 @@ public:
 
 };
 
-OXY_REGISTER_PLUGIN1("DAQOPEN_ZMQ_SUB", PLUGIN_MANIFEST, ReplaySyncScalarPlugin);
+OXY_REGISTER_PLUGIN1("DAQOPEN_ZMQ_SUB", PLUGIN_MANIFEST, DaqOpenZmqSubscriberPlugin);
 
