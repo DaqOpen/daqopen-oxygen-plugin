@@ -247,12 +247,22 @@ public:
                 .setDeletable(true)
                 ;
             }
-            auto min_range = (static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][0]) * 
-                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]) - 
-                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]));
-            auto max_range = (static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][1]) * 
-                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]) - 
-                              static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]));
+            
+            auto adc_range_lower = static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][0]);
+            auto adc_range_upper = static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][1]);
+            auto channel_gain = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]);
+            auto channel_offset = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]);
+            double min_range;
+            double max_range;
+            
+            if (m_metadata["daq_info"]["board"]["differential"]) {
+                min_range = ((adc_range_lower - adc_range_upper)/2 - 0.5) * channel_gain - channel_offset;
+                max_range = ((adc_range_upper - adc_range_lower)/2 - 0.5) * channel_gain - channel_offset;
+            }
+            else {
+                min_range = adc_range_lower * channel_gain - channel_offset;
+                max_range = adc_range_upper * channel_gain - channel_offset;
+            }
             // Configure Channel
             m_channel_map[ch_name]->setSamplerate({meta_json["daq_info"]["board"]["samplerate"], "Hz"})
             .setSimpleTimebase(meta_json["daq_info"]["board"]["samplerate"])
