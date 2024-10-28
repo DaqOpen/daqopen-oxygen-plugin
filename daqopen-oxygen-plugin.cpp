@@ -10,6 +10,7 @@
 #include "odkfw_software_channel_plugin.h"
 #include "odkbase_message_return_value_holder.h"
 #include "odkapi_utils.h"
+#include "odkapi_logging.h"
 
 #include "qml.rcc.h"
 
@@ -208,9 +209,23 @@ public:
         logger.log("Connect to " + m_zmq_conn_str->getValue());
         subscriber->init(m_zmq_conn_str->getValue());
 
+        int retry_counter = 0;
+        auto result = subscriber->receiveMessage(false);
+
         // Blocking wait for first message
-        // TODO: Non-Blocking with Error Message; Delete Channels and make invalid
-        auto result = subscriber->receiveMessage(true);
+        while (!result) {
+            retry_counter++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            result = subscriber->receiveMessage(false);
+            if (retry_counter > 1) {
+                logger.log("Update Method: NO message received");
+                auto log_msg = getHost()->createValue<odk::IfStringValue>();
+                log_msg->set(std::string("No message from" + m_zmq_conn_str->getValue()).c_str());
+                ODK_VERIFY(getHost()->messageAsync(odk::host_msg_async::LOG_MESSAGE, odk::LOGLEVEL_ERROR, log_msg.get()) == 0);
+                return false;
+            }
+        }
+        
         logger.log("Update Method: ZMQ message received");
 
         // Extract data from message
