@@ -362,11 +362,17 @@ public:
                 }
                 // Iterate all Channels
                 for (const auto& [ch_name, ch_data_vec] : m_channel_data_map) {
-                    m_channel_data_map[ch_name].clear();
+                    // Calculate and set array size
+                    size_t expected_size = data_vec.size() / m_channel_data_map.size();
+                    m_channel_data_map[ch_name].resize(expected_size);
+
+                    auto gain = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]);
+                    auto offset = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]);
+                    
+                    // Put samples into vector
+                    size_t vector_idx = 0;
                     for (size_t idx = m_data_column_map[ch_name]; idx < data_vec.size(); idx += m_channel_data_map.size()) {
-                        m_channel_data_map[ch_name].push_back(static_cast<double>(data_vec[idx]*
-                                            static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]) - 
-                                            static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]))); 
+                        m_channel_data_map[ch_name][vector_idx++] = static_cast<double>(data_vec[idx] * gain - offset);
                     }
                     addSamples(host, m_channel_map[ch_name]->getLocalId(), tick, &m_channel_data_map[ch_name][0], sizeof(double) * m_channel_data_map[ch_name].size());
                 }
