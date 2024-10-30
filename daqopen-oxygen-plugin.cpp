@@ -146,6 +146,7 @@ R"XML(<?xml version="1.0"?>
 
 // Keys for ConfigItems that are used to store channel settings
 std::string DATA_CH_KEY_PREFIX = "DATACHANNEL_";
+std::string DEBUG_CH_KEY_PREFIX = "DEBUGCHANNEL_";
 // Custom key (prefixed by plugin name)
 static const char* KEY_ZMQ_CONN_STR = "DAQOPEN_ZMQ_SUB/ZmqConnStr";
 
@@ -257,7 +258,7 @@ public:
                 m_channel_map[ch_name]->setDefaultName(ch_name)
                 .setSampleFormat(
                     odk::ChannelDataformat::SampleOccurrence::SYNC,
-                    odk::ChannelDataformat::SampleFormat::DOUBLE,
+                    odk::ChannelDataformat::SampleFormat::FLOAT,
                     1)
                 .setDeletable(true)
                 ;
@@ -317,6 +318,16 @@ public:
         getRootChannel()->setDefaultName("DAQopen ZMQ Sub")
             .setDeletable(true)
             .addProperty(KEY_ZMQ_CONN_STR, m_zmq_conn_str);
+
+        // Add debug channel
+        m_dbg_ch_tick_drift = addOutputChannel(DEBUG_CH_KEY_PREFIX + "TICK_DRIFT");
+        m_dbg_ch_tick_drift->setDefaultName("debug_tick_drift")
+            .setSampleFormat(
+                odk::ChannelDataformat::SampleOccurrence::ASYNC,
+                odk::ChannelDataformat::SampleFormat::DOUBLE,
+                1)
+            .setDeletable(true)
+            ;
     }
 
     bool configure(
@@ -344,6 +355,7 @@ public:
         auto ts = getMasterTimestamp(host);
         auto acq_start_ts = getAcquisitionStartTime(host);
 
+        // Sync Channels
         auto tick = m_next_tick;
         auto samplerate = m_channel_map.begin()->second->getSamplerateProperty(); // TODO: Alternative when no Channel?
         const auto rate_factor = samplerate->getValue().m_val / ts.m_frequency;
@@ -366,18 +378,24 @@ public:
                     size_t expected_size = data_vec.size() / m_channel_data_map.size();
                     m_channel_data_map[ch_name].resize(expected_size);
 
-                    auto gain = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]);
-                    auto offset = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]);
+                    auto gain = static_cast<float>(m_metadata["daq_info"]["channel"][ch_name]["gain"]);
+                    auto offset = static_cast<float>(m_metadata["daq_info"]["channel"][ch_name]["offset"]);
                     
                     // Put samples into vector
                     size_t vector_idx = 0;
                     for (size_t idx = m_data_column_map[ch_name]; idx < data_vec.size(); idx += m_channel_data_map.size()) {
-                        m_channel_data_map[ch_name][vector_idx++] = static_cast<double>(data_vec[idx] * gain - offset);
+                        m_channel_data_map[ch_name][vector_idx++] = static_cast<float>(data_vec[idx] * gain - offset);
                     }
-                    addSamples(host, m_channel_map[ch_name]->getLocalId(), tick, &m_channel_data_map[ch_name][0], sizeof(double) * m_channel_data_map[ch_name].size());
+                    addSamples(host, m_channel_map[ch_name]->getLocalId(), tick, &m_channel_data_map[ch_name][0], sizeof(float) * m_channel_data_map[ch_name].size());
                 }
+                logger.log("Added new Samples: m_values.size()=" + std::to_string(m_channel_data_map.begin()->second.size()) + 
+                           " at tick=" + std::to_string(tick) + 
+                           " with target_tick=" + std::to_string(target_tick) +
+                           " with acq_start_ts=" + std::to_string(acq_start_ts.m_nanoseconds_since_1970));
+                // Add Tick Drift to Debug Channel
+                auto tick_drift = static_cast<double>(tick) - static_cast<double>(target_tick);
+                addSample(host, m_dbg_ch_tick_drift->getLocalId(), ts.m_ticks, tick_drift);
                 tick += m_channel_data_map.begin()->second.size();
-                logger.log("Added new Samples: m_values.size()=" + std::to_string(m_channel_data_map.begin()->second.size()) + " at tick=" + std::to_string(tick) + " with acq_start_ts=" + std::to_string(acq_start_ts.m_nanoseconds_since_1970));
             }
             else {
                 break;
@@ -396,9 +414,10 @@ private:
     std::unique_ptr<ZMQSubscriber> subscriber = std::make_unique<ZMQSubscriber>();
 
     std::unordered_map<std::string, PluginChannelPtr> m_channel_map;
-    std::unordered_map<std::string, std::vector<double>> m_channel_data_map;
+    std::unordered_map<std::string, std::vector<float>> m_channel_data_map;
     std::unordered_map<std::string, std::uint8_t> m_data_column_map;
     json m_metadata = {{"daq_info", {}}};
+    PluginChannelPtr m_dbg_ch_tick_drift;
 
 };
 
