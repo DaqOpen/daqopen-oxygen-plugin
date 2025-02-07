@@ -242,6 +242,8 @@ public:
         m_data_column_map.clear();
         m_channel_gain_map.clear();
         m_channel_offset_map.clear();
+        m_channel_delay_map.clear();
+        int16_t m_channel_delay_min = 0;
 
         for (auto& [ch_name, ch_prop] : meta_json["daq_info"]["channel"].items()) {
             m_channel_data_map[ch_name] = {};
@@ -249,17 +251,24 @@ public:
             // Prepare Channel gain and offset
             auto channel_gain = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["gain"]);
             auto channel_offset = static_cast<double>(m_metadata["daq_info"]["channel"][ch_name]["offset"]);
+            auto channel_delay = static_cast<int16_t>(m_metadata["daq_info"]["channel"][ch_name]["delay"]);
             std::string sensor_name = ch_prop["sensor"]; // ch_prop["sensor"] can't be used directly
             if (!sensor_name.empty()) {
                 logger.log("Sensor " + sensor_name + " on channel " + ch_name);
                 auto sensor_gain = static_cast<double>(m_metadata["daq_info"]["sensor"][sensor_name]["gain"]);
                 auto sensor_offset = static_cast<double>(m_metadata["daq_info"]["sensor"][sensor_name]["offset"]);
+                auto sensor_delay = static_cast<int16_t>(m_metadata["daq_info"]["sensor"][sensor_name]["delay"]);
                 channel_gain *= sensor_gain;
                 channel_offset *= sensor_gain;
                 channel_offset += sensor_offset;
+                channel_delay += sensor_delay;
+            }
+            if (m_channel_delay_min > channel_delay) {
+                m_channel_delay_min = channel_delay;
             }
             m_channel_gain_map[ch_name] = static_cast<float>(channel_gain);
             m_channel_offset_map[ch_name] = static_cast<float>(channel_offset);
+            m_channel_delay_map[ch_name] = static_cast<int16_t>(channel_delay);
 
             
             // Check if channel exists in OXYGEN
@@ -280,7 +289,7 @@ public:
                 .setDeletable(true)
                 ;
             }
-            
+
             auto adc_range_lower = static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][0]);
             auto adc_range_upper = static_cast<double>(m_metadata["daq_info"]["board"]["adc_range"][1]);
             double min_range;
@@ -301,6 +310,11 @@ public:
             .setUnit(m_metadata["daq_info"]["channel"][ch_name]["unit"])
             ;
             
+        }
+
+        // Move Channel Delay to zero
+        for (const auto& [ch_name, ch_delay] : m_channel_delay_map) {
+            m_channel_delay_map[ch_name] -= m_channel_delay_min;
         }
 
         // Get all existing OXYGEN Channels and remove which dont't exists anymore
@@ -398,7 +412,12 @@ public:
                     for (size_t idx = m_data_column_map[ch_name]; idx < data_vec.size(); idx += m_channel_data_map.size()) {
                         m_channel_data_map[ch_name][vector_idx++] = static_cast<float>(data_vec[idx] * m_channel_gain_map[ch_name] - m_channel_offset_map[ch_name]);
                     }
-                    addSamples(host, m_channel_map[ch_name]->getLocalId(), tick, &m_channel_data_map[ch_name][0], sizeof(float) * m_channel_data_map[ch_name].size());
+                    if (tick == 0) {
+                        addSamples(host, m_channel_map[ch_name]->getLocalId(), tick, &m_channel_data_map[ch_name][0], sizeof(float) * (m_channel_data_map[ch_name].size()-m_channel_delay_map[ch_name]));
+                    }
+                    else {
+                        addSamples(host, m_channel_map[ch_name]->getLocalId(), tick-m_channel_delay_map[ch_name], &m_channel_data_map[ch_name][0], sizeof(float) * m_channel_data_map[ch_name].size());
+                    }
                 }
                 logger.log("Added new Samples: m_values.size()=" + std::to_string(m_channel_data_map.begin()->second.size()) + 
                            " at tick=" + std::to_string(tick) + 
@@ -430,6 +449,7 @@ private:
     std::unordered_map<std::string, std::uint8_t> m_data_column_map;
     std::unordered_map<std::string, float> m_channel_gain_map;
     std::unordered_map<std::string, float> m_channel_offset_map;
+    std::unordered_map<std::string, int16_t> m_channel_delay_map;
     json m_metadata = {{"daq_info", {}}};
     PluginChannelPtr m_dbg_ch_tick_drift;
 
